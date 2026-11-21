@@ -30,11 +30,12 @@ body.file-dragging #drop-overlay{display:flex}
 .paper{max-width:900px;margin:0 auto;background:white;padding:clamp(18px,3vw,36px);border-radius:4px;box-shadow:0 2px 12px #15243a14}
 #board{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.95;font-size:16px;min-height:65vh;user-select:text;cursor:text;outline-offset:5px;tab-size:4}
 #board .marked{background:#ffe3a4;text-decoration:underline;text-decoration-color:#cc940c;text-underline-offset:3px}
+#board .deletion{background:#ffe6e8;text-decoration:line-through;text-decoration-color:#b42333;text-decoration-thickness:2px}
 #board .active{background:#ffe1e3;box-shadow:inset 0 -2px var(--accent)}
 #board .found{background:#c9ddff;outline:1px solid #2563eb;outline-offset:-1px}
 .pin{display:inline;user-select:none;cursor:pointer;white-space:nowrap;vertical-align:baseline}
 .pin::before{content:attr(data-label);display:inline-block;font:700 11px/18px system-ui;vertical-align:2px;min-width:19px;text-align:center;padding:0 4px;margin:0 2px;background:var(--accent);color:white;border-radius:20px}
-.pin.insert::before{background:#176c80}.pin.active::before{outline:2px solid var(--blue);outline-offset:2px}.pin:focus-visible{outline:2px solid var(--blue)}
+.pin.insert::before{background:#176c80}.pin.delete::before{background:#b42333}.pin.active::before{outline:2px solid var(--blue);outline-offset:2px}.pin:focus-visible{outline:2px solid var(--blue)}
 #selection-status{padding:6px 12px;border-top:1px solid var(--line);background:white;min-height:30px;overflow-wrap:anywhere}
 aside{background:white;border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;min-width:0}
 .aside-top{padding:12px 14px;border-bottom:1px solid var(--line)}
@@ -42,7 +43,9 @@ aside{background:white;border-left:1px solid var(--line);display:flex;flex-direc
 .section-head{justify-content:space-between;margin-bottom:8px}.list-section+.list-section{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
 .item{border:1px solid var(--line);padding:10px;border-radius:10px;background:#fbfcfd;margin-bottom:8px}
 .item.selected{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
-.item .row{gap:6px}.item .del{margin-left:auto}.number{background:var(--accent);color:white;border-radius:20px;font-size:12px;font-weight:700;padding:3px 8px}.number.global{background:#475569}.number.insert{background:#176c80}
+.item .row{gap:6px}.item .del{margin-left:auto}.number{background:var(--accent);color:white;border-radius:20px;font-size:12px;font-weight:700;padding:3px 8px}.number.global{background:#475569}.number.insert{background:#176c80}.number.delete{background:#b42333}
+.item[data-kind="delete"] .quote{text-decoration:line-through;text-decoration-color:#b42333}
+.item .deletion-help{margin:8px 0 0}
 .quote{display:block;white-space:pre-wrap;overflow-wrap:anywhere;color:#39465a;background:#f0f2f5;border-radius:6px;padding:7px;margin:8px 0;font-size:12px;max-height:100px;overflow:auto}
 .item textarea{width:100%;resize:vertical;min-height:76px;line-height:1.6;margin-top:6px;display:block}
 .empty{border:1px dashed var(--line);border-radius:9px;padding:12px;text-align:center;color:var(--muted);font-size:12px;line-height:1.6}
@@ -62,10 +65,10 @@ footer{background:var(--paper);border-top:1px solid var(--line);padding:7px 16px
 <main id="main">
 <section class="stage-wrap" aria-label="原文">
 <div class="toolbar" role="toolbar" aria-label="添削ツール">
-<button id="add-range" class="primary" disabled>部分指摘を追加</button><button id="add-insert" disabled>追記指示を追加</button>
+<button id="add-range" class="primary" disabled>部分指摘を追加</button><button id="add-insert" disabled>追記指示を追加</button><button id="add-delete" disabled>削除指示を追加</button>
 <button id="undo" disabled>元に戻す</button><button id="redo" disabled>やり直す</button><span class="spacer"></span>
 <div class="search"><input id="search" type="search" placeholder="原文を検索" aria-label="原文を検索" disabled><button id="prev" aria-label="前の検索結果" disabled>↑</button><button id="next" aria-label="次の検索結果" disabled>↓</button><small id="matches" aria-live="polite"></small></div>
-<div class="hint">原文をドラッグして部分指摘を追加。追記は挿入したい位置をクリックしてから追加します。原文は編集されません。TXT・MDファイルは画面へのドラッグ＆ドロップでも読み込めます。</div>
+<div class="hint">原文の範囲を選択して部分指摘や削除指示を追加。追記は挿入位置をクリックして追加します。削除指示でも原文自体は消えません。原文は編集されません。TXT・MDファイルは画面へのドラッグ＆ドロップでも読み込めます。</div>
 </div>
 <div id="stage" class="stage">
 <div id="empty" class="dropzone"><h2>原文を読み込む</h2><p class="muted">文章を貼り付けるか、TXT・MDファイルをこの画面にドラッグ＆ドロップしてください。「TXT／MDを開く」からも読み込めます。</p><textarea id="initial" aria-label="原文を貼り付け" placeholder="ここに文章を貼り付け"></textarea><button id="start" class="primary">添削を開始</button><p class="muted">文章と指摘はこのブラウザの中に保存されます。外部送信はありません。</p></div>
@@ -77,7 +80,7 @@ footer{background:var(--paper);border-top:1px solid var(--line);padding:7px 16px
 <div class="aside-top row"><h2>指摘一覧</h2><span class="spacer"></span><small id="count">0件</small></div>
 <div class="lists" id="lists">
 <section class="list-section"><div class="section-head"><h3>全体への指摘</h3><button id="add-global" disabled>＋ 全体指摘を追加</button></div><div id="globals"></div></section>
-<section class="list-section"><div class="section-head"><h3>部分・追記への指摘</h3><small>原文の順番</small></div><div id="locals"></div></section>
+<section class="list-section"><div class="section-head"><h3>部分・追記・削除の指摘</h3><small>原文の順番</small></div><div id="locals"></div></section>
 </div>
 <div class="output"><details id="preview-details"><summary>AIへ渡すプロンプト全文</summary><textarea id="preview" readonly aria-label="AIへの修正指示"></textarea></details>
 <div class="row"><button id="copy-original" disabled>原文をコピー</button><button id="copy-prompt" class="primary" disabled>修正指示をコピー</button></div><small id="output-hint">すべての指摘と修正ルールをまとめてコピーします。原文全文は含めません。</small></div>
@@ -93,9 +96,9 @@ function valid(s){
   if(!s||s.version!==1||typeof s.text!=="string"||s.text!==normalize(s.text)||!Array.isArray(s.notes)||!Number.isSafeInteger(s.next)||s.next<1)return false;
   const ids=new Set();
   for(const n of s.notes){
-    if(!n||!Number.isSafeInteger(n.id)||n.id<1||n.id>=s.next||ids.has(n.id)||typeof n.comment!=="string"||!["global","range","insert"].includes(n.kind))return false;
+    if(!n||!Number.isSafeInteger(n.id)||n.id<1||n.id>=s.next||ids.has(n.id)||typeof n.comment!=="string"||!["global","range","insert","delete"].includes(n.kind))return false;
     ids.add(n.id);
-    if(n.kind!=="global"&&(!Number.isInteger(n.start)||!Number.isInteger(n.end)||n.start<0||n.end>s.text.length||n.start>n.end||(n.kind==="range"?n.start===n.end:n.start!==n.end)))return false;
+    if(n.kind!=="global"&&(!Number.isInteger(n.start)||!Number.isInteger(n.end)||n.start<0||n.end>s.text.length||n.start>n.end||((n.kind==="range"||n.kind==="delete")?n.start===n.end:n.start!==n.end)))return false;
   }
   return !s.notes.length||!!s.text;
 }
@@ -109,10 +112,10 @@ function makePrompt(s){
   const local=s.notes.filter(n=>n.kind!=="global").sort((a,b)=>a.start-b.start||a.id-b.id);
   if(!local.length)lines.push("なし");
   for(const n of local){
-    lines.push("#"+n.id+" "+(n.kind==="insert"?"追記":"部分")+"（"+position(s.text,n.start)+(n.kind==="range"?" ～ "+position(s.text,n.end)+"・終端は含まない":"")+"）");
-    if(n.kind==="range")lines.push("対象： "+JSON.stringify(s.text.slice(n.start,n.end)));
+    lines.push("#"+n.id+" "+(n.kind==="insert"?"追記":n.kind==="delete"?"削除":"部分")+"（"+position(s.text,n.start)+(n.kind!=="insert"?" ～ "+position(s.text,n.end)+"・終端は含まない":"")+"）");
+    if(n.kind!=="insert")lines.push("対象： "+JSON.stringify(s.text.slice(n.start,n.end)));
     else lines.push("直前： "+JSON.stringify(s.text.slice(Math.max(0,n.start-40),n.start)),"直後： "+JSON.stringify(s.text.slice(n.start,n.start+40)));
-    lines.push("修正指示： "+n.comment,"");
+    lines.push("修正指示： "+(n.kind==="delete"?"対象範囲を削除してください。削除による前後のつながりに必要な調整以外は行わないでください。":n.comment),"");
   }
   lines.push("【共通ルール】","・全体指摘は原文全体へ適用してください。","・全体指摘・個別指摘に必要な変更以外は、原文の内容や表現を維持してください。","・指摘が矛盾する場合や意図が曖昧な場合は、勝手に判断せず確認してください。","・修正後の文章全文と、指摘番号ごとの変更内容を分けて出力してください。");
   return lines.join("\n");
@@ -120,7 +123,7 @@ function makePrompt(s){
 function segments(s,search){
   const cuts=new Map();function event(p){if(!cuts.has(p))cuts.set(p,{on:[],off:[],pins:[]});return cuts.get(p)}
   event(0);event(s.text.length);
-  for(const n of s.notes){if(n.kind==="global")continue;event(n.start).pins.push(n);if(n.kind==="range"){event(n.start).on.push(n.id);event(n.end).off.push(n.id)}}
+  for(const n of s.notes){if(n.kind==="global")continue;event(n.start).pins.push(n);if(n.kind==="range"||n.kind==="delete"){event(n.start).on.push(n.id);event(n.end).off.push(n.id)}}
   if(search){event(search.start).on.push("search");event(search.end).off.push("search")}
   const positions=[...cuts.keys()].sort((a,b)=>a-b),active=new Set(),out=[];
   for(let i=0;i<positions.length;i++){const p=positions[i],e=cuts.get(p);for(const id of e.off)active.delete(id);for(const id of e.on)active.add(id);out.push({start:p,end:positions[i+1]??p,pins:e.pins,ids:[...active]})}
@@ -146,8 +149,9 @@ function setText(text){text=normalize(text);if(!text.trim()){alert("文章を入
 if(state.text&&!confirm("現在の原文と指摘を置き換えますか？"))return false;
 action(()=>{state={...blank(),text};selected=null;selection=null;resetSearch()});stage.scrollTop=0;$("initial").value="";return true}
 function resetSearch(){$("search").value="";hits=[];hitIndex=-1;searchHit=null;updateSearch()}
-function buttonState(){const loaded=ready&&!!state.text;const has=state.notes.length>0;const complete=has&&state.notes.every(n=>n.comment.trim());
+function buttonState(){const loaded=ready&&!!state.text;const has=state.notes.length>0;const complete=has&&state.notes.every(n=>n.kind==="delete"||n.comment.trim());
 $("add-range").disabled=!loaded||!selection||selection.start===selection.end;
+$("add-delete").disabled=!loaded||!selection||selection.start===selection.end;
 $("add-insert").disabled=!loaded||!selection||selection.start!==selection.end;
 $("add-global").disabled=!loaded;$("search").disabled=!loaded;$("copy-original").disabled=!loaded;$("copy-prompt").disabled=!loaded||!complete;
 $("preview-details").hidden=!loaded;$("export").disabled=!loaded;$("undo").disabled=!ready||!past.length;$("redo").disabled=!ready||!future.length;
@@ -156,27 +160,28 @@ $("output-hint").textContent=!has?"指摘を追加すると修正指示を作成
 function updatePreview(){if($("preview-details").open)$("preview").value=state.text?makePrompt(state):"";buttonState()}
 function updateSelection(){let message="原文を読み込んでください。";if(state.text){message="原文をドラッグして範囲を選択するか、追記位置をクリックしてください。";if(selection)message=selection.start===selection.end?"追記位置："+position(state.text,selection.start):"選択中："+(selection.end-selection.start)+"文字（"+position(state.text,selection.start)+"）"}$("selection-status").textContent=message;buttonState()}
 function clearSelection(){selection=null;const s=window.getSelection();if(s&&s.anchorNode&&board.contains(s.anchorNode))s.removeAllRanges();updateSelection()}
-function renderBoard(){const top=stage.scrollTop;board.replaceChildren();const frag=document.createDocumentFragment();
+function renderBoard(){const top=stage.scrollTop;board.replaceChildren();const frag=document.createDocumentFragment();const deletedIds=new Set(state.notes.filter(n=>n.kind==="delete").map(n=>n.id));
 for(const seg of segments(state,searchHit)){
-for(const n of seg.pins){const pin=document.createElement("span");pin.className="pin"+(n.kind==="insert"?" insert":"");pin.dataset.id=String(n.id);pin.dataset.label=(n.kind==="insert"?"+":"")+n.id;pin.tabIndex=0;pin.setAttribute("role","button");pin.setAttribute("aria-label",(n.kind==="insert"?"追記":"部分")+"指摘 "+n.id+" へ移動");pin.title="指摘 #"+n.id;frag.append(pin)}
-if(seg.end>seg.start){const span=document.createElement("span");span.dataset.start=String(seg.start);span.dataset.end=String(seg.end);const ids=seg.ids.filter(id=>id!=="search");if(ids.length){span.classList.add("marked");span.dataset.ids=ids.join(",")}if(seg.ids.includes("search"))span.classList.add("found");span.textContent=state.text.slice(seg.start,seg.end);frag.append(span)}
+for(const n of seg.pins){const pin=document.createElement("span");pin.className="pin"+(n.kind==="insert"?" insert":n.kind==="delete"?" delete":"");pin.dataset.id=String(n.id);pin.dataset.label=(n.kind==="insert"?"+":"")+n.id;pin.tabIndex=0;pin.setAttribute("role","button");pin.setAttribute("aria-label",(n.kind==="insert"?"追記":n.kind==="delete"?"削除":"部分")+"指摘 "+n.id+" へ移動");pin.title="指摘 #"+n.id;frag.append(pin)}
+if(seg.end>seg.start){const span=document.createElement("span");span.dataset.start=String(seg.start);span.dataset.end=String(seg.end);const ids=seg.ids.filter(id=>id!=="search");if(ids.length){span.classList.add("marked");span.dataset.ids=ids.join(",");if(ids.some(id=>deletedIds.has(id)))span.classList.add("deletion")}if(seg.ids.includes("search"))span.classList.add("found");span.textContent=state.text.slice(seg.start,seg.end);frag.append(span)}
 }
 board.append(frag);stage.scrollTop=top;applyActive()}
 function emptyMessage(text){const el=document.createElement("div");el.className="empty";el.textContent=text;return el}
-function localLabel(n){return n.kind==="insert"?"追記":"部分"}
-function makeCard(n){const card=document.createElement("article");card.className="item";card.dataset.card=String(n.id);
+function localLabel(n){return n.kind==="insert"?"追記":n.kind==="delete"?"削除":"部分"}
+function makeCard(n){const card=document.createElement("article");card.className="item";card.dataset.card=String(n.id);card.dataset.kind=n.kind;
 const row=document.createElement("div");row.className="row";const badge=document.createElement("span");badge.className="number "+n.kind;badge.textContent=(n.kind==="global"?"全体":localLabel(n))+" #"+n.id;row.append(badge);
 if(n.kind!=="global"){const jump=document.createElement("button");jump.type="button";jump.textContent="原文へ";jump.addEventListener("click",()=>activate(n.id,true,false));row.append(jump)}
 const del=document.createElement("button");del.type="button";del.className="del danger";del.textContent="削除";del.setAttribute("aria-label","指摘 "+n.id+" を削除");del.addEventListener("click",()=>action(()=>{state.notes=state.notes.filter(x=>x.id!==n.id);if(selected===n.id)selected=null}));row.append(del);card.append(row);
-if(n.kind!=="global"){const loc=document.createElement("small");loc.textContent=position(state.text,n.start)+(n.kind==="range"?" ～ "+position(state.text,n.end):" に追記");card.append(loc);const quote=document.createElement("div");quote.className="quote";quote.textContent=n.kind==="range"?state.text.slice(n.start,n.end):(state.text.slice(Math.max(0,n.start-28),n.start)+" ｜ "+state.text.slice(n.start,n.start+28));card.append(quote)}
+if(n.kind!=="global"){const loc=document.createElement("small");loc.textContent=position(state.text,n.start)+(n.kind==="insert"?" に追記":" ～ "+position(state.text,n.end));card.append(loc);const quote=document.createElement("div");quote.className="quote";quote.textContent=n.kind!=="insert"?state.text.slice(n.start,n.end):(state.text.slice(Math.max(0,n.start-28),n.start)+" ｜ "+state.text.slice(n.start,n.start+28));card.append(quote)}
+if(n.kind==="delete"){const note=document.createElement("p");note.className="muted deletion-help";note.textContent="この範囲を削除する指示です（原文は変更されません）。";card.append(note);return card}
 const input=document.createElement("textarea");input.rows=3;input.value=n.comment;input.placeholder="修正してほしい内容を入力";input.setAttribute("aria-label","指摘 "+n.id+" の内容");input.addEventListener("focus",()=>{editing=null;activate(n.id,false,false)});input.addEventListener("input",()=>{const current=state.notes.find(x=>x.id===n.id);if(!current)return;if(editing!==n.id){history();editing=n.id}current.comment=input.value;updatePreview();dirty()});input.addEventListener("blur",()=>{editing=null;if(saveTimer)saveNow()});card.append(input);return card}
 function renderLists(){const top=lists.scrollTop;const gs=$("globals"),ls=$("locals");gs.replaceChildren();ls.replaceChildren();const global=state.notes.filter(n=>n.kind==="global"),local=state.notes.filter(n=>n.kind!=="global").sort((a,b)=>a.start-b.start||a.id-b.id);
 if(!global.length)gs.append(emptyMessage("構成・文体など、文章全体への指摘を追加できます。"));else global.forEach(n=>gs.append(makeCard(n)));
-if(!local.length)ls.append(emptyMessage("原文を選択して部分指摘を追加できます。"));else local.forEach(n=>ls.append(makeCard(n)));
+if(!local.length)ls.append(emptyMessage("原文を選択して部分指摘・削除指示を追加できます。"));else local.forEach(n=>ls.append(makeCard(n)));
 $("count").textContent=state.notes.length+"件";lists.scrollTop=top;applyActive()}
 function applyActive(){for(const el of board.querySelectorAll("[data-id],[data-ids]")){el.classList.toggle("active",selected!==null&&(el.dataset.id===String(selected)||(el.dataset.ids||"").split(",").includes(String(selected))))}for(const el of lists.querySelectorAll("[data-card]"))el.classList.toggle("selected",el.dataset.card===String(selected))}
 function scrollInside(container,el){if(!el)return;const r=el.getBoundingClientRect(),c=container.getBoundingClientRect();if(r.top<c.top+12||r.bottom>c.bottom-12){container.scrollTop+=r.top-c.top-20}}
-function activate(id,jumpBoard,jumpCard,focusInput=false){selected=id;applyActive();if(jumpBoard)scrollInside(stage,board.querySelector('[data-id="'+id+'"]'));const card=lists.querySelector('[data-card="'+id+'"]');if(jumpCard)scrollInside(lists,card);if(focusInput&&card)card.querySelector("textarea").focus({preventScroll:true})}
+function activate(id,jumpBoard,jumpCard,focusInput=false){selected=id;applyActive();if(jumpBoard)scrollInside(stage,board.querySelector('[data-id="'+id+'"]'));const card=lists.querySelector('[data-card="'+id+'"]');if(jumpCard)scrollInside(lists,card);if(focusInput&&card){const control=card.querySelector("textarea")||card.querySelector("button");if(control)control.focus({preventScroll:true})}}
 function render(){$("empty").hidden=!!state.text;$("paper").hidden=!state.text;renderBoard();renderLists();updateSearch();updateSelection();updatePreview()}
 function readSelection(){if(!ready||!state.text)return;const s=window.getSelection();if(!s||!s.rangeCount||!board.contains(s.anchorNode)||!board.contains(s.focusNode))return;try{const range=s.getRangeAt(0);const start=document.createRange(),end=document.createRange();start.selectNodeContents(board);end.selectNodeContents(board);start.setEnd(range.startContainer,range.startOffset);end.setEnd(range.endContainer,range.endOffset);selection={start:start.toString().length,end:end.toString().length};selection.start=Math.min(state.text.length,selection.start);selection.end=Math.min(state.text.length,selection.end);updateSelection()}catch{}}
 document.addEventListener("selectionchange",readSelection);
@@ -184,8 +189,8 @@ board.addEventListener("pointerup",e=>{if(!e.target.closest(".pin"))readSelectio
 board.addEventListener("keyup",readSelection);
 board.addEventListener("click",e=>{const pin=e.target.closest(".pin");if(pin){const s=window.getSelection();if(s&&!s.isCollapsed)return;clearSelection();activate(Number(pin.dataset.id),false,true,true)}});
 board.addEventListener("keydown",e=>{const pin=e.target.closest(".pin");if(pin&&(e.key==="Enter"||e.key===" ")){e.preventDefault();clearSelection();activate(Number(pin.dataset.id),false,true,true)}});
-function add(kind){if(!state.text)return;const range=selection&&{...selection};if(kind==="range"&&(!range||range.start===range.end))return;if(kind==="insert"&&(!range||range.start!==range.end))return;const id=state.next;clearSelection();action(()=>{state.notes.push({id:state.next++,kind,comment:"",...(kind==="global"?{}:range)});selected=id});activate(id,false,true,true)}
-$("add-range").onclick=()=>add("range");$("add-insert").onclick=()=>add("insert");$("add-global").onclick=()=>add("global");
+function add(kind){if(!state.text)return;const range=selection&&{...selection};if((kind==="range"||kind==="delete")&&(!range||range.start===range.end))return;if(kind==="insert"&&(!range||range.start!==range.end))return;const id=state.next;clearSelection();action(()=>{state.notes.push({id:state.next++,kind,comment:"",...(kind==="global"?{}:range)});selected=id});activate(id,false,true,kind!=="delete")}
+$("add-range").onclick=()=>add("range");$("add-insert").onclick=()=>add("insert");$("add-delete").onclick=()=>add("delete");$("add-global").onclick=()=>add("global");
 $("undo").onclick=undo;$("redo").onclick=redo;
 document.addEventListener("keydown",e=>{if(!(e.ctrlKey||e.metaKey)||e.altKey||e.target.matches("textarea,input,[contenteditable]"))return;if(e.key.toLowerCase()==="z"){e.preventDefault();e.shiftKey?redo():undo()}else if(e.key.toLowerCase()==="y"){e.preventDefault();redo()}});
 function updateSearch(){$("matches").textContent=!$("search").value?"":hits.length?(hitIndex+1)+" / "+hits.length:"0件";$("prev").disabled=!hits.length;$("next").disabled=!hits.length}
@@ -235,7 +240,7 @@ $("export").onclick=()=>{download(JSON.stringify(snapshot(),null,2),"kokonaoTxt-
 async function copy(text){try{if(!navigator.clipboard)throw Error("clipboard unavailable");await navigator.clipboard.writeText(text);return true}catch{const el=document.createElement("textarea");el.value=text;el.style.cssText="position:fixed;top:0;left:0;opacity:0";document.body.append(el);el.select();let ok=false;try{ok=document.execCommand("copy")}catch{}el.remove();return ok}}
 async function copyResult(text){if(await copy(text)){status("コピーしました。");return}alert("自動コピーできませんでした。プレビューまたは原文を選択してコピーしてください。")}
 $("copy-original").onclick=()=>copyResult(state.text);
-$("copy-prompt").onclick=()=>{if(state.notes.length&&state.notes.every(n=>n.comment.trim()))copyResult(makePrompt(state))};
+$("copy-prompt").onclick=()=>{if(state.notes.length&&state.notes.every(n=>n.kind==="delete"||n.comment.trim()))copyResult(makePrompt(state))};
 $("preview-details").addEventListener("toggle",updatePreview);
 async function init(){const controls=[...document.querySelectorAll("header button,#start")];controls.forEach(b=>b.disabled=true);try{db=await new Promise((resolve,reject)=>{const request=indexedDB.open("kokonao-txt-review",1);request.onupgradeneeded=()=>request.result.createObjectStore("state");request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);request.onblocked=()=>reject(Error("blocked"))});const saved=await new Promise((resolve,reject)=>{const r=db.transaction("state").objectStore("state").get("current");r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});if(saved&&valid(saved)){state=saved;status("前回の作業を復元しました。")}else if(saved){status("前回の作業データを復元できませんでした。",true)}else status("保存先：このブラウザ")}catch{db=null;status("自動保存できません。作業をJSONで保存してください。",true)}finally{ready=true;controls.forEach(b=>b.disabled=false);render()}}
 init();
