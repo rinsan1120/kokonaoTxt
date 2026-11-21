@@ -17,7 +17,16 @@ button:hover:not(:disabled){background:#eef1f5}button.primary{background:var(--b
 button:disabled{opacity:.45;cursor:not-allowed}button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,390px)}
 .stage-wrap{display:flex;flex-direction:column;min-width:0;min-height:0}
-.toolbar{padding:8px 12px;background:white;border-bottom:1px solid var(--line)}.toolbar .hint{flex-basis:100%}
+.toolbar{padding:10px 12px;background:white;border-bottom:1px solid var(--line);align-items:flex-end;gap:10px 14px}
+.tool-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tool-label{display:block;flex-basis:100%;font-size:11px;font-weight:600;line-height:1.2;color:#5b6573}
+.tool-group button{white-space:nowrap}
+.toolbar .tool-group button:not(:disabled){background:#fff;color:var(--ink);border-color:#b8c2d0}
+.toolbar .tool-group button:hover:not(:disabled){background:#eff4fa;border-color:#8098b5}
+.toolbar .tool-group button:disabled{opacity:1;background:#f3f4f6;color:#9ca3af;border-color:#e2e5ea;cursor:not-allowed}
+.history-group{border-left:1px solid var(--line);padding-left:14px}
+.toolbar .hint{flex-basis:100%;margin-top:1px;line-height:1.5}
+@media(max-width:620px){.history-group{border-left:0;padding-left:0}.tool-group{row-gap:5px}.tool-label{font-size:12px}}
 .search{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.search input{width:clamp(100px,16vw,190px);min-height:34px}
 input,textarea{border:1px solid var(--line);border-radius:7px;background:white;color:var(--ink);padding:7px 9px;min-width:0}
 .stage{flex:1;min-height:0;overflow:auto;background:#e8ebef;padding:20px;overscroll-behavior:contain;scroll-padding:16px}
@@ -65,16 +74,26 @@ footer{background:var(--paper);border-top:1px solid var(--line);padding:7px 16px
 <main id="main">
 <section class="stage-wrap" aria-label="原文">
 <div class="toolbar" role="toolbar" aria-label="添削ツール">
-<button id="add-range" class="primary" disabled>部分指摘を追加</button><button id="add-insert" disabled>追記指示を追加</button><button id="add-delete" disabled>削除指示を追加</button>
-<button id="undo" disabled>元に戻す</button><button id="redo" disabled>やり直す</button><span class="spacer"></span>
+<div class="tool-group" role="group" aria-label="指摘の追加">
+<span class="tool-label">指摘を追加</span>
+<button id="add-range" disabled aria-describedby="tool-hint selection-status">部分指摘を追加</button>
+<button id="add-insert" disabled aria-describedby="tool-hint selection-status">追記指示を追加</button>
+<button id="add-delete" disabled aria-describedby="tool-hint selection-status">削除指示を追加</button>
+</div>
+<div class="tool-group history-group" role="group" aria-label="操作履歴">
+<span class="tool-label">操作履歴</span>
+<button id="undo" disabled aria-describedby="tool-hint">元に戻す</button>
+<button id="redo" disabled aria-describedby="tool-hint">やり直す</button>
+</div>
+<span class="spacer"></span>
 <div class="search"><input id="search" type="search" placeholder="原文を検索" aria-label="原文を検索" disabled><button id="prev" aria-label="前の検索結果" disabled>↑</button><button id="next" aria-label="次の検索結果" disabled>↓</button><small id="matches" aria-live="polite"></small></div>
-<div class="hint">原文の範囲を選択して部分指摘や削除指示を追加。追記は挿入位置をクリックして追加します。削除指示でも原文自体は消えません。原文は編集されません。TXT・MDファイルは画面へのドラッグ＆ドロップでも読み込めます。</div>
+<div id="tool-hint" class="hint">薄いボタンは操作できません。文章を範囲選択 →「部分・削除」、挿入位置をクリック →「追記」。元に戻すは操作履歴があるとき、やり直すは取り消し後に使えます。</div>
 </div>
 <div id="stage" class="stage">
 <div id="empty" class="dropzone"><h2>原文を読み込む</h2><p class="muted">文章を貼り付けるか、TXT・MDファイルをこの画面にドラッグ＆ドロップしてください。「TXT／MDを開く」からも読み込めます。</p><textarea id="initial" aria-label="原文を貼り付け" placeholder="ここに文章を貼り付け"></textarea><button id="start" class="primary">添削を開始</button><p class="muted">文章と指摘はこのブラウザの中に保存されます。外部送信はありません。</p></div>
 <div id="paper" class="paper" hidden><div id="board" tabindex="0" aria-label="原文（読み取り専用）"></div></div>
 </div>
-<div id="selection-status" class="muted" aria-live="polite">原文を読み込んでください。</div>
+<div id="selection-status" class="muted" role="status" aria-live="polite">操作方法：まず原文を読み込んでください。</div>
 </section>
 <aside aria-label="指摘と出力">
 <div class="aside-top row"><h2>指摘一覧</h2><span class="spacer"></span><small id="count">0件</small></div>
@@ -158,7 +177,16 @@ $("preview-details").hidden=!loaded;$("export").disabled=!loaded;$("undo").disab
 $("output-hint").textContent=!has?"指摘を追加すると修正指示を作成できます。":!complete?"未入力の指摘があります。すべて入力してからコピーしてください。":"すべての指摘と修正ルールをまとめてコピーします。原文全文は含めません。";
 }
 function updatePreview(){if($("preview-details").open)$("preview").value=state.text?makePrompt(state):"";buttonState()}
-function updateSelection(){let message="原文を読み込んでください。";if(state.text){message="原文をドラッグして範囲を選択するか、追記位置をクリックしてください。";if(selection)message=selection.start===selection.end?"追記位置："+position(state.text,selection.start):"選択中："+(selection.end-selection.start)+"文字（"+position(state.text,selection.start)+"）"}$("selection-status").textContent=message;buttonState()}
+function updateSelection(){
+let message="操作方法：まず原文を読み込んでください。";
+if(state.text){
+message="操作方法：文章をドラッグすると「部分指摘・削除指示」が使えます。文章内をクリックすると「追記指示」が使えます。";
+if(selection)message=selection.start===selection.end
+?"追記位置："+position(state.text,selection.start)+"。現在「追記指示を追加」が使えます。"
+:"選択中："+(selection.end-selection.start)+"文字（"+position(state.text,selection.start)+"）。現在「部分指摘を追加」「削除指示を追加」が使えます。";
+}
+$("selection-status").textContent=message;buttonState()
+}
 function clearSelection(){selection=null;const s=window.getSelection();if(s&&s.anchorNode&&board.contains(s.anchorNode))s.removeAllRanges();updateSelection()}
 function renderBoard(){const top=stage.scrollTop;board.replaceChildren();const frag=document.createDocumentFragment();const deletedIds=new Set(state.notes.filter(n=>n.kind==="delete").map(n=>n.id));
 for(const seg of segments(state,searchHit)){
