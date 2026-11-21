@@ -49,6 +49,12 @@ body.file-dragging #drop-overlay{display:flex}
 #board .active{background:#ffe1e3;box-shadow:inset 0 -2px var(--accent)}
 #board .found{background:#c9ddff;outline:1px solid #2563eb;outline-offset:-1px}
 .pin{display:inline;user-select:none;cursor:pointer;white-space:nowrap;vertical-align:baseline}
+.pin.insert{cursor:grab}
+.pin.insert:active{cursor:grabbing}
+.pin.insert.dragging::before{outline:2px solid var(--blue);outline-offset:2px;opacity:.65}
+#insert-drop-guide{position:fixed;z-index:45;display:none;width:3px;min-height:20px;background:var(--blue);border-radius:3px;box-shadow:0 0 0 2px #ffffffcc;pointer-events:none}
+#insert-drop-guide::before{content:"";position:absolute;top:-4px;left:-4px;width:11px;height:8px;background:var(--blue);border-radius:3px}
+#insert-drop-guide.visible{display:block}
 .pin::before{content:attr(data-label);display:inline-block;font:700 11px/18px system-ui;vertical-align:2px;min-width:19px;text-align:center;padding:0 4px;margin:0 2px;background:var(--accent);color:white;border-radius:20px}
 .pin.insert::before{background:#176c80}.pin.delete::before{background:#b42333}.pin.active::before{outline:2px solid var(--blue);outline-offset:2px}.pin:focus-visible{outline:2px solid var(--blue)}
 #selection-status{padding:6px 12px;border-top:1px solid var(--line);background:white;min-height:30px;overflow-wrap:anywhere}
@@ -96,7 +102,7 @@ footer{background:var(--paper);border-top:1px solid var(--line);padding:7px 16px
 </div>
 <span class="spacer"></span>
 <div class="search"><input id="search" type="search" placeholder="原文を検索" aria-label="原文を検索" disabled><button id="prev" aria-label="前の検索結果" disabled>↑</button><button id="next" aria-label="次の検索結果" disabled>↓</button><small id="matches" aria-live="polite"></small></div>
-<div id="tool-hint" class="hint">グレーのボタンは操作前の状態です。指摘の追加は左の操作方法に従ってください。操作を取り消すと「やり直す」が使えます。</div>
+<div id="tool-hint" class="hint">グレーのボタンは操作前の状態です。追加済みの追記マーカー（＋番号）は、原文上でドラッグ＆ドロップして位置を変更できます。操作を取り消すと「やり直す」が使えます。</div>
 </div>
 <div id="stage" class="stage">
 <div id="empty" class="dropzone"><h2>原文を読み込む</h2><p class="muted">文章を貼り付けるか、TXT・MDファイルをこの画面にドラッグ＆ドロップしてください。「TXT／MDを開く」からも読み込めます。</p><textarea id="initial" aria-label="原文を貼り付け" placeholder="ここに文章を貼り付け"></textarea><button id="start" class="primary">添削を開始</button><p class="muted">文章と指摘はこのブラウザの中に保存されます。外部送信はありません。</p></div>
@@ -114,6 +120,7 @@ footer{background:var(--paper);border-top:1px solid var(--line);padding:7px 16px
 <div class="row"><button id="copy-original" disabled>原文をコピー</button><button id="copy-prompt" class="primary" disabled>修正指示をコピー</button></div><small id="output-hint">すべての指摘と修正ルールをまとめてコピーします。原文全文は含めません。</small></div>
 </aside>
 </main>
+<div id="insert-drop-guide" aria-hidden="true"></div>
 <div id="drop-overlay" aria-hidden="true"><div class="drop-message">TXT・MDファイルをドロップして原文を読み込む<small>読み込み済みの原文と指摘がある場合は、置き換えを確認します。</small></div></div>
 <footer><span id="status" role="status">保存先：このブラウザ</span><span>v0.1.0 · Created by <a href="https://x.com/rinsan11201" target="_blank" rel="noopener">rinsan1120</a></span></footer>
 <dialog id="paste-dialog"><h2>原文を貼り付け</h2><p class="muted">新しい文章を読み込むと、現在の指摘はリセットされます。</p><textarea id="paste-text" aria-label="新しい原文" placeholder="文章を貼り付け"></textarea><div class="dialog-actions"><button id="cancel-paste">キャンセル</button><button id="apply-paste" class="primary">読み込む</button></div></dialog>
@@ -132,6 +139,13 @@ function valid(s){
 }
 function position(t,offset){const before=t.slice(0,offset);return (before.split("\n").length)+"行 "+(offset-before.lastIndexOf("\n"))+"列"}
 // Stable IDs are used for navigation and saved work; visible numbers follow the document.
+function relocateInsertNote(s,id,offset){
+  const n=s.notes.find(note=>note.id===id&&note.kind==="insert");
+  if(!n||!Number.isInteger(offset)||offset<0||offset>s.text.length||n.start===offset)return false;
+  n.start=offset;
+  n.end=offset;
+  return true;
+}
 function orderedNotes(s){
   const global=s.notes.filter(n=>n.kind==="global").sort((a,b)=>a.id-b.id);
   const local=s.notes.filter(n=>n.kind!=="global").sort((a,b)=>a.start-b.start||a.id-b.id);
@@ -170,6 +184,7 @@ const $=id=>document.getElementById(id);
 const blank=()=>({version:1,text:"",notes:[],next:1});
 const board=$("board"),stage=$("stage"),lists=$("lists");
 let state=blank(),past=[],future=[],selected=null,selection=null,searchHit=null,hits=[],hitIndex=-1,editing=null,db=null,saveTimer=null,ready=false,storageError=false,loading=false;
+let draggingInsertId=null;
 const MAX_HISTORY=50;
 const snapshot=()=>({version:1,text:state.text,next:state.next,notes:state.notes.map(n=>({...n}))});
 const status=(message,error=false)=>{$("status").textContent=message;$("status").classList.toggle("error",error)};
@@ -214,7 +229,7 @@ $("selection-status").textContent=message;buttonState()
 function clearSelection(){selection=null;const s=window.getSelection();if(s&&s.anchorNode&&board.contains(s.anchorNode))s.removeAllRanges();updateSelection()}
 function renderBoard(){const top=stage.scrollTop;board.replaceChildren();const frag=document.createDocumentFragment();const deletedIds=new Set(state.notes.filter(n=>n.kind==="delete").map(n=>n.id));const numbers=orderedNotes(state).numbers;
 for(const seg of segments(state,searchHit)){
-for(const n of seg.pins.sort((a,b)=>Number(numbers.get(a.id))-Number(numbers.get(b.id)))){const pin=document.createElement("span");pin.className="pin"+(n.kind==="insert"?" insert":n.kind==="delete"?" delete":"");pin.dataset.id=String(n.id);pin.dataset.label=(n.kind==="insert"?"+":"")+numbers.get(n.id);pin.tabIndex=0;pin.setAttribute("role","button");pin.setAttribute("aria-label",(n.kind==="insert"?"追記":n.kind==="delete"?"削除":"部分")+"指摘 #"+numbers.get(n.id)+" へ移動");pin.title="指摘 #"+numbers.get(n.id);frag.append(pin)}
+for(const n of seg.pins.sort((a,b)=>Number(numbers.get(a.id))-Number(numbers.get(b.id)))){const pin=document.createElement("span");pin.className="pin"+(n.kind==="insert"?" insert":n.kind==="delete"?" delete":"");pin.dataset.id=String(n.id);pin.dataset.label=(n.kind==="insert"?"+":"")+numbers.get(n.id);if(n.kind==="insert")pin.draggable=true;pin.tabIndex=0;pin.setAttribute("role","button");pin.setAttribute("aria-label",(n.kind==="insert"?"追記":n.kind==="delete"?"削除":"部分")+"指摘 #"+numbers.get(n.id)+" へ移動");pin.title=n.kind==="insert"?"追記 #"+numbers.get(n.id)+"：ドラッグして挿入位置を変更":"指摘 #"+numbers.get(n.id);frag.append(pin)}
 if(seg.end>seg.start){const span=document.createElement("span");span.dataset.start=String(seg.start);span.dataset.end=String(seg.end);const ids=seg.ids.filter(id=>id!=="search");if(ids.length){span.classList.add("marked");span.dataset.ids=ids.join(",");if(ids.some(id=>deletedIds.has(id)))span.classList.add("deletion")}if(seg.ids.includes("search"))span.classList.add("found");span.textContent=state.text.slice(seg.start,seg.end);frag.append(span)}
 }
 board.append(frag);stage.scrollTop=top;applyActive()}
@@ -226,6 +241,7 @@ if(n.kind!=="global"){const jump=document.createElement("button");jump.type="but
 const del=document.createElement("button");del.type="button";del.className="del danger";del.textContent="削除";del.setAttribute("aria-label","指摘 "+noteLabel(n,numbers)+" を削除");del.addEventListener("click",()=>action(()=>{state.notes=state.notes.filter(x=>x.id!==n.id);if(selected===n.id)selected=null}));row.append(del);card.append(row);
 if(n.kind!=="global"){const loc=document.createElement("small");loc.textContent=position(state.text,n.start)+(n.kind==="insert"?" に追記":" ～ "+position(state.text,n.end));card.append(loc);const quote=document.createElement("div");quote.className="quote";quote.textContent=n.kind!=="insert"?state.text.slice(n.start,n.end):(state.text.slice(Math.max(0,n.start-28),n.start)+" ｜ "+state.text.slice(n.start,n.start+28));card.append(quote)}
 if(n.kind==="delete"){const note=document.createElement("p");note.className="muted deletion-help";note.textContent="この範囲を削除する指示です（原文は変更されません）。";card.append(note);return card}
+if(n.kind==="insert"){const note=document.createElement("p");note.className="muted deletion-help";note.textContent="追記マーカー（＋番号）を原文上でドラッグすると位置を変更できます。";card.append(note)}
 const input=document.createElement("textarea");input.rows=3;input.value=n.comment;input.placeholder="修正してほしい内容を入力";input.setAttribute("aria-label","指摘 "+noteLabel(n,numbers)+" の内容");input.addEventListener("focus",()=>{editing=null;activate(n.id,false,false)});input.addEventListener("input",()=>{const current=state.notes.find(x=>x.id===n.id);if(!current)return;if(editing!==n.id){history();editing=n.id}current.comment=input.value;updatePreview();dirty()});input.addEventListener("blur",()=>{editing=null;if(saveTimer)saveNow()});card.append(input);return card}
 function renderLists(){const top=lists.scrollTop;const gs=$("globals"),ls=$("locals");gs.replaceChildren();ls.replaceChildren();const {global,local,numbers}=orderedNotes(state);
 if(!global.length)gs.append(emptyMessage("構成・文体など、文章全体への指摘を追加できます。"));else global.forEach(n=>gs.append(makeCard(n,numbers)));
@@ -241,6 +257,92 @@ board.addEventListener("pointerup",e=>{if(!e.target.closest(".pin"))readSelectio
 board.addEventListener("keyup",readSelection);
 board.addEventListener("click",e=>{const pin=e.target.closest(".pin");if(pin){const s=window.getSelection();if(s&&!s.isCollapsed)return;clearSelection();activate(Number(pin.dataset.id),false,true,true)}});
 board.addEventListener("keydown",e=>{const pin=e.target.closest(".pin");if(pin&&(e.key==="Enter"||e.key===" ")){e.preventDefault();clearSelection();activate(Number(pin.dataset.id),false,true,true)}});
+// Move an existing insertion point without editing the original text or changing its stable ID.
+function caretPointOnBoard(x,y){
+  const bounds=board.getBoundingClientRect();
+  if(x<bounds.left||x>bounds.right||y<bounds.top||y>bounds.bottom)return null;
+  let node=null,offset=0;
+  if(document.caretPositionFromPoint){
+    const caret=document.caretPositionFromPoint(x,y);
+    if(caret){node=caret.offsetNode;offset=caret.offset}
+  }
+  if(!node&&document.caretRangeFromPoint){
+    const caret=document.caretRangeFromPoint(x,y);
+    if(caret){node=caret.startContainer;offset=caret.startOffset}
+  }
+  if(!node||!(node===board||board.contains(node)))return null;
+  try{
+    const prefix=document.createRange();
+    prefix.selectNodeContents(board);
+    prefix.setEnd(node,offset);
+    const index=Math.min(state.text.length,Math.max(0,prefix.toString().length));
+    const caret=document.createRange();
+    caret.setStart(node,offset);
+    caret.collapse(true);
+    const rect=caret.getClientRects()[0]||caret.getBoundingClientRect();
+    return {index,rect};
+  }catch{return null}
+}
+function showInsertDropGuide(caret,x,y){
+  const guide=$("insert-drop-guide");
+  const r=caret.rect;
+  const bounds=board.getBoundingClientRect();
+  const hasRect=r&&Number.isFinite(r.top)&&r.height>0;
+  guide.style.left=Math.round(Math.max(bounds.left,Math.min(bounds.right-3,hasRect?r.left:x)))+"px";
+  guide.style.top=Math.round(Math.max(bounds.top,Math.min(bounds.bottom-20,hasRect?r.top:y-13)))+"px";
+  guide.style.height=Math.round(hasRect?Math.max(20,Math.min(42,r.height)):30)+"px";
+  guide.classList.add("visible");
+}
+function clearInsertDrag(){
+  draggingInsertId=null;
+  $("insert-drop-guide").classList.remove("visible");
+  board.querySelectorAll(".pin.insert.dragging").forEach(el=>el.classList.remove("dragging"));
+}
+board.addEventListener("dragstart",e=>{
+  const marker=e.target instanceof Element?e.target.closest(".pin.insert"):null;
+  const id=marker?Number(marker.dataset.id):null;
+  if(id===null||!state.notes.some(n=>n.id===id&&n.kind==="insert"))return;
+  if(!e.dataTransfer){e.preventDefault();return}
+  draggingInsertId=id;
+  e.dataTransfer.effectAllowed="move";
+  e.dataTransfer.setData("application/x-kokonaotxt-insert",String(id));
+  marker.classList.add("dragging");
+  selected=id;
+  applyActive();
+});
+board.addEventListener("dragover",e=>{
+  if(draggingInsertId===null)return;
+  const target=caretPointOnBoard(e.clientX,e.clientY);
+  if(!target){$("insert-drop-guide").classList.remove("visible");if(e.dataTransfer)e.dataTransfer.dropEffect="none";return}
+  e.preventDefault();
+  if(e.dataTransfer)e.dataTransfer.dropEffect="move";
+  showInsertDropGuide(target,e.clientX,e.clientY);
+});
+board.addEventListener("dragleave",e=>{
+  if(draggingInsertId===null)return;
+  const bounds=board.getBoundingClientRect();
+  if(e.clientX<bounds.left||e.clientX>bounds.right||e.clientY<bounds.top||e.clientY>bounds.bottom)$("insert-drop-guide").classList.remove("visible");
+});
+board.addEventListener("drop",e=>{
+  if(draggingInsertId===null)return;
+  e.preventDefault();
+  const target=caretPointOnBoard(e.clientX,e.clientY);
+  const id=draggingInsertId;
+  clearInsertDrag();
+  if(!target)return;
+  const current=state.notes.find(n=>n.id===id&&n.kind==="insert");
+  if(!current)return;
+  if(current.start===target.index){activate(id,false,true);return}
+  clearSelection();
+  action(()=>{relocateInsertNote(state,id,target.index);selected=id});
+  activate(id,false,true);
+  status("追記位置を "+position(state.text,target.index)+" に移動しました。");
+});
+board.addEventListener("dragend",clearInsertDrag);
+document.addEventListener("drop",e=>{
+  if(draggingInsertId!==null&&!(e.target instanceof Node&&board.contains(e.target))){e.preventDefault();clearInsertDrag()}
+});
+window.addEventListener("blur",clearInsertDrag);
 function add(kind){if(!state.text)return;const range=selection&&{...selection};if((kind==="range"||kind==="delete")&&(!range||range.start===range.end))return;if(kind==="insert"&&(!range||range.start!==range.end))return;const id=state.next;clearSelection();action(()=>{state.notes.push({id:state.next++,kind,comment:"",...(kind==="global"?{}:range)});selected=id});activate(id,false,true,kind!=="delete")}
 $("add-range").onclick=()=>add("range");$("add-insert").onclick=()=>add("insert");$("add-delete").onclick=()=>add("delete");$("add-global").onclick=()=>add("global");
 $("undo").onclick=undo;$("redo").onclick=redo;
